@@ -1,0 +1,61 @@
+# Model
+model_name: "Qwen/Qwen2.5-7B-Instruct"
+max_seq_length: 4096
+
+# QLoRA quantization
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+# LoRA config
+lora:
+  r: 32
+  lora_alpha: 64
+  lora_dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  task_type: "CAUSAL_LM"
+
+# Training hyperparameters
+training:
+  output_dir: "./outputs"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  lr_scheduler_type: "cosine"
+  logging_steps: 10
+  save_strategy: "steps"
+  save_steps: 100
+  eval_strategy: "steps"
+  eval_steps: 100
+  bf16: true
+  gradient_checkpointing: true
+  optim: "paged_adamw_8bit"
+  max_grad_norm: 0.3
+  group_by_length: true
+
+# Data paths
+data:
+  ami_dataset: "knkarthick/AMI"
+  synthetic_output: "./data/processed/synthetic.jsonl"
+  train_file: "./data/processed/train.jsonl"
+  val_file: "./data/processed/val.jsonl"
+
+# Inference settings
+inference:
+  chunk_size: 3000
+  chunk_overlap: 300
+  max_new_tokens: 1024
+  temperature: 0.3
+  top_p: 0.9

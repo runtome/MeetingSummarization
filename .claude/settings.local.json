@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(txt|yaml|yml|json|toml|cfg|ini|sh|py\\)$\")",
+      "WebSearch"
+    ]
+  }
+}
