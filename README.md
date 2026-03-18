@@ -1,1 +1,1 @@
-# Meeting-Minutes-Summarization
+# MeetingSummarization
