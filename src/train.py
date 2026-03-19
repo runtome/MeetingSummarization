@@ -28,6 +28,13 @@ _SYSTEM_PROMPT = (
 _USER_TEMPLATE = "Summarize the following news article:\n\n{article}"
 
 
+def _force_fp16(module: torch.nn.Module) -> None:
+    """Keep any inadvertently bf16 params (e.g. PEFT adapters) in fp16 on older GPUs."""
+    for param in module.parameters():
+        if param.dtype == torch.bfloat16:
+            param.data = param.data.to(torch.float16)
+
+
 def load_dataset_file(path: str) -> Dataset:
     """
     Load training data from either:
@@ -209,6 +216,9 @@ def main():
         processing_class=tokenizer,
         args=training_args,          # max_seq_length now lives inside SFTConfig
     )
+
+    if not _is_ampere_plus:
+        _force_fp16(trainer.model)
 
     # 8. Train
     print("Starting training...")
