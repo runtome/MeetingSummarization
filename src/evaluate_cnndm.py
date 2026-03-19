@@ -87,7 +87,7 @@ def load_model(adapter_path: str, base_model_name: str):
 
 def load_test_csv(path: str, max_samples: int | None = None) -> pd.DataFrame:
     """Load the CNN-DailyMail test CSV and return a DataFrame."""
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, on_bad_lines="skip")
 
     # Normalise column names (handle lowercase / title-case variants)
     df.columns = [c.strip().lower() for c in df.columns]

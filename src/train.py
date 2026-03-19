@@ -38,7 +38,7 @@ def load_dataset_file(path: str) -> Dataset:
     ext = Path(path).suffix.lower()
 
     if ext == ".csv":
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, on_bad_lines="skip")
         df.columns = [c.strip().lower() for c in df.columns]
         missing = {"article", "highlights"} - set(df.columns)
         if missing:
