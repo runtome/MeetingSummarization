@@ -12,6 +12,13 @@ from src.inference import load_model, parse_sections, summarize_meeting
 REQUIRED_SECTIONS = ["Summary", "Key Points", "Decisions", "Action Items"]
 
 
+def _find_message_content(messages: list[dict], role: str) -> str:
+    for msg in messages:
+        if msg.get("role") == role:
+            return msg.get("content", "")
+    return ""
+
+
 def preprocess_for_rouge(text: str) -> str:
     """Pre-tokenize Thai text for ROUGE scoring by inserting spaces."""
     try:
@@ -98,7 +105,12 @@ def evaluate_model(
     max_samples: int = None,
 ) -> dict:
     """Run full evaluation: ROUGE + structure quality."""
-    model, tokenizer = load_model(adapter_path, config["model_name"])
+    preferred_dtype = config.get("quantization", {}).get("bnb_4bit_compute_dtype")
+    model, tokenizer = load_model(
+        adapter_path,
+        config["model_name"],
+        preferred_dtype=preferred_dtype,
+    )
 
     # Load test data
     test_examples = []
@@ -116,16 +128,22 @@ def evaluate_model(
     print(f"Evaluating on {len(test_examples)} examples...")
 
     for example in tqdm(test_examples):
-        messages = example["messages"]
-        # Extract transcript from user message
-        transcript = messages[1]["content"]
-        # Remove the instruction prefix
-        transcript = transcript.replace(
-            "Summarize the following meeting transcript into structured meeting minutes:\n\n",
-            "",
-        )
-        # Reference is the assistant message
-        reference = messages[2]["content"]
+        messages = example.get("messages", [])
+        if not messages:
+            print("Skipping example without messages")
+            continue
+        user_content = _find_message_content(messages, "user")
+        assistant_content = _find_message_content(messages, "assistant")
+        if not user_content or not assistant_content:
+            print("Skipping example missing user or assistant messages")
+            continue
+        transcript = user_content.removeprefix(
+            "Summarize the following meeting transcript into structured meeting minutes:\n\n"
+        ).strip()
+        if not transcript:
+            print("Skipping example with empty transcript after prefix removal")
+            continue
+        reference = assistant_content
 
         # Generate prediction
         prediction = summarize_meeting(transcript, model, tokenizer, config)

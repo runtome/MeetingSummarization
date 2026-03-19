@@ -23,6 +23,8 @@ from rouge_score import rouge_scorer
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+from src.utils.device import detect_compute_dtype_and_attn
+
 # ── Prompt template (must match prepare_cnndm_dataset.py) ────────────────────
 SYSTEM_PROMPT = (
     "You are a news summarization assistant. Given a news article, "
@@ -35,22 +37,13 @@ USER_TEMPLATE = "Summarize the following news article:\n\n{article}"
 # Model loading
 # ─────────────────────────────────────────────────────────────────────────────
 
-def detect_gpu():
-    """Return (dtype, attn_impl) appropriate for the current GPU."""
-    if not torch.cuda.is_available():
-        return torch.float32, "eager"
-    major = torch.cuda.get_device_capability()[0]
-    is_ampere_plus = major >= 8
-    dtype     = torch.bfloat16 if is_ampere_plus else torch.float16
-    attn_impl = "flash_attention_2" if is_ampere_plus else "sdpa"
-    name = torch.cuda.get_device_name(0)
-    print(f"GPU: {name}  sm_{major}0 → dtype={dtype}, attn={attn_impl}")
-    return dtype, attn_impl
-
-
-def load_model(adapter_path: str, base_model_name: str):
+def load_model(
+    adapter_path: str,
+    base_model_name: str,
+    preferred_dtype: str | None = None,
+):
     """Load the base model with 4-bit QLoRA and apply the fine-tuned adapter."""
-    dtype, attn_impl = detect_gpu()
+    dtype, attn_impl, _, _ = detect_compute_dtype_and_attn(preferred_dtype)
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -242,12 +235,17 @@ def evaluate(
     max_new_tokens = inf_cfg.get("max_new_tokens", 256)
     temperature    = inf_cfg.get("temperature", 0.3)
     top_p          = inf_cfg.get("top_p", 0.9)
+    preferred_dtype = config.get("quantization", {}).get("bnb_4bit_compute_dtype")
 
     # 1. Load data
     df = load_test_data(test_csv, max_samples=max_samples)
 
     # 2. Load model + adapter
-    model, tokenizer = load_model(adapter_path, config["model_name"])
+    model, tokenizer = load_model(
+        adapter_path,
+        config["model_name"],
+        preferred_dtype=preferred_dtype,
+    )
 
     # 3. Generate summaries
     predictions: list[str] = []

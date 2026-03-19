@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 # Must be set before any CUDA allocation — reduces fragmentation OOM on small GPUs.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 import pandas as pd
 import torch
@@ -19,6 +19,8 @@ from transformers import (
     BitsAndBytesConfig,
 )
 from trl import SFTConfig, SFTTrainer
+
+from src.utils.device import detect_compute_dtype_and_attn
 
 # ── Prompt template (must match prepare_cnndm_dataset.py) ────────────────────
 _SYSTEM_PROMPT = (
@@ -106,14 +108,10 @@ def main():
     train_cfg = config["training"]
     data_cfg = config["data"]
 
-    # 0. GPU capability detection  ────────────────────────────────────────────
-    # Ampere (sm_80+) : bfloat16 + flash_attention_2
-    # Pascal / Volta  : float16  + sdpa  (P100 = sm_60, V100 = sm_70)
-    import torch.cuda as _cuda
-    _major = _cuda.get_device_capability()[0] if _cuda.is_available() else 0
-    _is_ampere_plus = _major >= 8
-    _dtype     = torch.bfloat16 if _is_ampere_plus else torch.float16
-    _attn_impl = "flash_attention_2" if _is_ampere_plus else "sdpa"
+    preferred_dtype = q_config.get("bnb_4bit_compute_dtype")
+    _dtype, _attn_impl, _is_ampere_plus, _major = detect_compute_dtype_and_attn(
+        preferred_dtype
+    )
     print(f"GPU sm_{_major}0 → dtype={_dtype}, attn={_attn_impl}")
 
     # 1. Quantization config  (compute dtype follows GPU capability)
@@ -204,6 +202,7 @@ def main():
         max_grad_norm=train_cfg["max_grad_norm"],
         # ── dataloader ──────────────────────────────────────────
         dataloader_pin_memory=False,    # pin_memory wastes VRAM on P100
+        group_by_length=train_cfg.get("group_by_length", False),
         report_to="none",
     )
 

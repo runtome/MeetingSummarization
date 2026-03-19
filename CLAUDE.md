@@ -69,6 +69,6 @@ YAML configs in `configs/` control model, LoRA, training, inference, and data se
 
 ## Technical Notes
 
-- GPU memory management: uses `PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"`, gradient checkpointing, paged AdamW 8-bit optimizer
+- GPU memory management: uses `PYTORCH_ALLOC_CONF="expandable_segments:True"`, gradient checkpointing, paged AdamW 8-bit optimizer
 - No unit test framework; validation is done through ROUGE evaluation scripts
 - Synthetic data generation uses language distribution: 50% Thai+English mixed, 25% Thai only, 25% English only

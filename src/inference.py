@@ -9,6 +9,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from src.data.thai_utils import normalize_meeting_text
+from src.utils.device import detect_compute_dtype_and_attn
 
 SYSTEM_PROMPT = (
     "You are a meeting summarization assistant. Given a meeting transcript, "
@@ -34,12 +35,15 @@ def load_model(
     adapter_path: str,
     base_model: str,
     device_map: str = "auto",
+    preferred_dtype: str | None = None,
 ) -> tuple:
     """Load base model with QLoRA quantization and apply LoRA adapter."""
+    dtype, attn_impl, _, _ = detect_compute_dtype_and_attn(preferred_dtype)
+
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_compute_dtype=dtype,
         bnb_4bit_use_double_quant=True,
     )
 
@@ -48,7 +52,8 @@ def load_model(
         base_model,
         quantization_config=bnb_config,
         device_map=device_map,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=dtype,
+        attn_implementation=attn_impl,
     )
 
     print(f"Loading adapter: {adapter_path}")
@@ -238,7 +243,12 @@ def main():
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    model, tokenizer = load_model(args.adapter_path, config["model_name"])
+    preferred_dtype = config.get("quantization", {}).get("bnb_4bit_compute_dtype")
+    model, tokenizer = load_model(
+        args.adapter_path,
+        config["model_name"],
+        preferred_dtype=preferred_dtype,
+    )
 
     with open(args.input, "r", encoding="utf-8") as f:
         transcript = f.read()
