@@ -65,6 +65,9 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
+    # Set truncation length here — works across all TRL versions because
+    # SFTTrainer always honours tokenizer.model_max_length when tokenising.
+    tokenizer.model_max_length = max_seq_length
 
     # 4. LoRA config
     peft_config = LoraConfig(
@@ -92,8 +95,6 @@ def main():
     training_args = SFTConfig(
         # ── output ──────────────────────────────────────────────
         output_dir=output_dir,
-        # ── sequence length (replaces SFTTrainer kwarg) ─────────
-        max_seq_length=max_seq_length,
         # ── schedule ────────────────────────────────────────────
         num_train_epochs=train_cfg["num_train_epochs"],
         per_device_train_batch_size=train_cfg["per_device_train_batch_size"],

@@ -359,7 +359,7 @@ print(scores)
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `TypeError: unexpected keyword argument 'group_by_length'` | Removed in `transformers ≥ 4.45` | Delete `group_by_length` from `TrainingArguments` and YAML |
-| `TypeError: unexpected keyword argument 'max_seq_length'` (in `SFTTrainer`) | Moved to `SFTConfig` in TRL ≥ 0.12 | Use `SFTConfig` (not `TrainingArguments`) and set `max_seq_length` there |
+| `TypeError: unexpected keyword argument 'max_seq_length'` (in `SFTTrainer`) | Moved to `SFTConfig` in TRL 0.12, then fully removed in TRL ≥ 0.15 | Remove from both `SFTTrainer` and `SFTConfig`; set `tokenizer.model_max_length = 1024` instead |
 | `warmup_ratio is deprecated` | Removed in TRL v5.2 | Compute `warmup_steps = total_steps × ratio` and use `warmup_steps=` instead |
 | `UserWarning: torch_dtype is deprecated` | Renamed parameter | Use `dtype=torch.bfloat16` instead of `torch_dtype=` |
 | `CUDA out of memory` | Batch size too large | Reduce `per_device_train_batch_size` to 4 or 2; increase `gradient_accumulation_steps` |

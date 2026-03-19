@@ -46,8 +46,8 @@ training:
 
 # Data paths & limits
 data:
-  train_file: "./data/cnndm/train.jsonl"
-  val_file: "./data/cnndm/val.jsonl"
+  train_file: "/kaggle/working/MeetingSummarization/datasets/train.csv"
+  val_file: "/kaggle/working/MeetingSummarization/datasets/validation.csv"
   max_train_samples: 50000    # set null to use full 287k
   max_val_samples: 2000       # set null to use full 13k
 
