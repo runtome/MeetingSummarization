@@ -205,34 +205,46 @@ peft_config = LoraConfig(
 ## 6. Training Arguments
 
 ```python
-from transformers import TrainingArguments
+from trl import SFTConfig   # ← use SFTConfig, NOT TrainingArguments (TRL ≥ 0.12)
 
-training_args = TrainingArguments(
+# warmup_ratio is deprecated → convert to warmup_steps at runtime
+effective_batch = per_device_train_batch_size * gradient_accumulation_steps  # 16
+total_steps     = (len(train_dataset) // effective_batch) * num_epochs       # ~3125
+warmup_steps    = max(1, int(total_steps * 0.03))                            # ~94
+
+training_args = SFTConfig(
     output_dir="./outputs/cnndm",
+    # ── max_seq_length lives here now (removed from SFTTrainer.__init__) ──
+    max_seq_length=1024,
+    # ── schedule ──────────────────────────────────────────────────────────
     num_train_epochs=1,
     per_device_train_batch_size=8,
-    gradient_accumulation_steps=2,      # effective batch size = 16
+    gradient_accumulation_steps=2,
     learning_rate=2e-4,
     weight_decay=0.01,
-    warmup_ratio=0.03,
+    warmup_steps=warmup_steps,          # replaces deprecated warmup_ratio
     lr_scheduler_type="cosine",
+    # ── logging / saving / eval ───────────────────────────────────────────
     logging_steps=50,
     save_strategy="steps",
     save_steps=500,
     eval_strategy="steps",
     eval_steps=500,
+    save_total_limit=3,
+    # ── precision / memory ────────────────────────────────────────────────
     bf16=True,
     gradient_checkpointing=True,
     optim="paged_adamw_8bit",
     max_grad_norm=0.3,
     report_to="none",
-    save_total_limit=3,
     # NOTE: `group_by_length` was REMOVED in transformers ≥ 4.45 — do not use
 )
 ```
 
-> **Removed argument:** `group_by_length` no longer exists in `TrainingArguments` as of `transformers 4.45+`.
-> Delete it from your config / code to fix `TypeError: unexpected keyword argument 'group_by_length'`.
+> **Key changes vs older TRL:**
+> - `SFTConfig` replaces `TrainingArguments` — it inherits everything + adds `max_seq_length`
+> - `max_seq_length` is set in `SFTConfig`, **not** in `SFTTrainer()`
+> - `warmup_ratio` → compute `warmup_steps` manually to silence the deprecation warning
 
 ---
 
@@ -347,6 +359,8 @@ print(scores)
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `TypeError: unexpected keyword argument 'group_by_length'` | Removed in `transformers ≥ 4.45` | Delete `group_by_length` from `TrainingArguments` and YAML |
+| `TypeError: unexpected keyword argument 'max_seq_length'` (in `SFTTrainer`) | Moved to `SFTConfig` in TRL ≥ 0.12 | Use `SFTConfig` (not `TrainingArguments`) and set `max_seq_length` there |
+| `warmup_ratio is deprecated` | Removed in TRL v5.2 | Compute `warmup_steps = total_steps × ratio` and use `warmup_steps=` instead |
 | `UserWarning: torch_dtype is deprecated` | Renamed parameter | Use `dtype=torch.bfloat16` instead of `torch_dtype=` |
 | `CUDA out of memory` | Batch size too large | Reduce `per_device_train_batch_size` to 4 or 2; increase `gradient_accumulation_steps` |
 | `Flash Attention not available` | GPU is not Ampere | Remove `attn_implementation="flash_attention_2"` (falls back to SDPA) |

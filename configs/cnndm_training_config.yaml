@@ -32,7 +32,7 @@ training:
   gradient_accumulation_steps: 2
   learning_rate: 2.0e-4
   weight_decay: 0.01
-  warmup_ratio: 0.03
+  warmup_ratio: 0.03      # converted to warmup_steps at runtime (ratio × total_steps)
   lr_scheduler_type: "cosine"
   logging_steps: 50
   save_strategy: "steps"
