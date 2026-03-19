@@ -129,6 +129,13 @@ def main():
     )
     model.config.use_cache = False
 
+    # 2b. On non-Ampere GPUs, cast any bfloat16 params to float16 so that
+    #     the fp16 GradScaler can handle them (P100 / V100 do not support bf16).
+    if not _is_ampere_plus:
+        for param in model.parameters():
+            if param.dtype == torch.bfloat16:
+                param.data = param.data.to(torch.float16)
+
     # 3. Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
