@@ -1,0 +1,59 @@
+# Model
+model_name: "Qwen/Qwen2.5-7B-Instruct"
+max_seq_length: 1024  # articles avg ~781 tokens + highlights avg ~56 tokens
+
+# QLoRA quantization
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+# LoRA config
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  task_type: "CAUSAL_LM"
+
+# Training hyperparameters
+training:
+  output_dir: "./outputs/cnndm"
+  num_train_epochs: 1          # 287k samples; 1 epoch is usually enough
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 2
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 50
+  save_strategy: "steps"
+  save_steps: 500
+  eval_strategy: "steps"
+  eval_steps: 500
+  bf16: true
+  gradient_checkpointing: true
+  optim: "paged_adamw_8bit"
+  max_grad_norm: 0.3
+  group_by_length: true
+
+# Data paths & limits
+data:
+  train_file: "./data/cnndm/train.jsonl"
+  val_file: "./data/cnndm/val.jsonl"
+  max_train_samples: 50000    # set null to use full 287k
+  max_val_samples: 2000       # set null to use full 13k
+
+# Inference settings
+inference:
+  max_new_tokens: 256
+  temperature: 0.3
+  top_p: 0.9
