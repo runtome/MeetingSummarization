@@ -43,7 +43,6 @@ training:
   gradient_checkpointing: true
   optim: "paged_adamw_8bit"
   max_grad_norm: 0.3
-  group_by_length: true
 
 # Data paths & limits
 data:

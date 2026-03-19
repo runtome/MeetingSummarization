@@ -56,7 +56,7 @@ def main():
         model_name,
         quantization_config=bnb_config,
         device_map="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
     )
     model.config.use_cache = False
@@ -102,7 +102,6 @@ def main():
         gradient_checkpointing=train_cfg["gradient_checkpointing"],
         optim=train_cfg["optim"],
         max_grad_norm=train_cfg["max_grad_norm"],
-        group_by_length=train_cfg["group_by_length"],
         report_to="none",
         save_total_limit=3,
     )
