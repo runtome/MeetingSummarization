@@ -294,6 +294,55 @@ Change `report_to="none"` → `report_to="wandb"` in `TrainingArguments`.
 
 ## 9. Inference / Evaluation
 
+### 9.0 Run the CNN-DailyMail evaluation script
+
+```bash
+python -m src.evaluate_cnndm \
+    --adapter-path ./outputs/cnndm/final_adapter \
+    --test-csv     /kaggle/working/MeetingSummarization/datasets/test.csv \
+    --config       configs/cnndm_training_config.yaml \
+    --output       ./outputs/cnndm/eval_results.json
+
+# Evaluate only 500 rows (faster smoke-test)
+python -m src.evaluate_cnndm \
+    --adapter-path ./outputs/cnndm/final_adapter \
+    --test-csv     /kaggle/working/MeetingSummarization/datasets/test.csv \
+    --max-samples  500
+```
+
+**Expected console output:**
+```
+============================================================
+  CNN-DAILYMAIL EVALUATION RESULTS
+============================================================
+  Samples evaluated : 11490
+  Adapter           : ./outputs/cnndm/final_adapter
+------------------------------------------------------------
+  ROUGE1    F1=42.31   P=44.10   R=41.22
+  ROUGE2    F1=19.87   P=20.73   R=19.38
+  ROUGEL    F1=38.94   P=40.56   R=37.91
+============================================================
+```
+
+The JSON output (`eval_results.json`) contains:
+```json
+{
+  "adapter_path": "...",
+  "test_csv": "...",
+  "num_samples": 11490,
+  "elapsed_seconds": 3820.5,
+  "rouge": {
+    "rouge1": { "fmeasure": {"mean": 0.423, "min": ..., "max": ...}, ... },
+    "rouge2": { ... },
+    "rougeL": { ... }
+  },
+  "per_sample": [
+    { "article": "...", "reference": "...", "prediction": "..." },
+    ...
+  ]
+}
+```
+
 ### 9.1 Load the saved adapter
 
 ```python

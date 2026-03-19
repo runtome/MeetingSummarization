@@ -2,8 +2,13 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 
+# Must be set before any CUDA allocation — reduces fragmentation OOM on small GPUs.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+import pandas as pd
 import torch
 import yaml
 from datasets import Dataset
@@ -15,13 +20,50 @@ from transformers import (
 )
 from trl import SFTConfig, SFTTrainer
 
+# ── Prompt template (must match prepare_cnndm_dataset.py) ────────────────────
+_SYSTEM_PROMPT = (
+    "You are a news summarization assistant. Given a news article, "
+    "write a concise and accurate summary capturing the most important facts."
+)
+_USER_TEMPLATE = "Summarize the following news article:\n\n{article}"
 
-def load_jsonl_dataset(path: str) -> Dataset:
-    """Load a JSONL file with messages format into a HuggingFace Dataset."""
+
+def load_dataset_file(path: str) -> Dataset:
+    """
+    Load training data from either:
+      • .jsonl  — each line is {"messages": [...]}
+      • .csv    — must have 'article' and 'highlights' columns;
+                  converted to the same messages format on the fly.
+    """
+    ext = Path(path).suffix.lower()
+
+    if ext == ".csv":
+        df = pd.read_csv(path)
+        df.columns = [c.strip().lower() for c in df.columns]
+        missing = {"article", "highlights"} - set(df.columns)
+        if missing:
+            raise ValueError(f"CSV {path} missing columns: {missing}")
+        df = df.dropna(subset=["article", "highlights"])
+
+        records = []
+        for _, row in df.iterrows():
+            records.append({
+                "messages": [
+                    {"role": "system",    "content": _SYSTEM_PROMPT},
+                    {"role": "user",      "content": _USER_TEMPLATE.format(
+                                                        article=str(row["article"]).strip())},
+                    {"role": "assistant", "content": str(row["highlights"]).strip()},
+                ]
+            })
+        return Dataset.from_list(records)
+
+    # Default: JSONL
     records = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            records.append(json.loads(line))
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
     return Dataset.from_list(records)
 
 
@@ -89,10 +131,10 @@ def main():
         task_type=TaskType.CAUSAL_LM,
     )
 
-    # 5. Load datasets
+    # 5. Load datasets  (supports both .csv and .jsonl)
     print("Loading datasets...")
-    train_dataset = load_jsonl_dataset(data_cfg["train_file"])
-    val_dataset = load_jsonl_dataset(data_cfg["val_file"])
+    train_dataset = load_dataset_file(data_cfg["train_file"])
+    val_dataset   = load_dataset_file(data_cfg["val_file"])
     print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}")
 
     # 6. Training arguments (SFTConfig = TrainingArguments + max_seq_length, TRL ≥ 0.12)
@@ -125,8 +167,13 @@ def main():
         bf16=_is_ampere_plus,           # bf16 only on Ampere+; P100 uses fp16
         fp16=not _is_ampere_plus,       # fp16 on Pascal/Volta (P100/V100)
         gradient_checkpointing=train_cfg["gradient_checkpointing"],
+        # use_reentrant=False avoids a second full forward-pass in the backward
+        # and is compatible with PEFT / QLoRA.
+        gradient_checkpointing_kwargs={"use_reentrant": False},
         optim=train_cfg["optim"],
         max_grad_norm=train_cfg["max_grad_norm"],
+        # ── dataloader ──────────────────────────────────────────
+        dataloader_pin_memory=False,    # pin_memory wastes VRAM on P100
         report_to="none",
     )
 

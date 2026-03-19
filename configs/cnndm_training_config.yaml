@@ -1,6 +1,6 @@
 # Model
 model_name: "Qwen/Qwen2.5-7B-Instruct"
-max_seq_length: 1024  # articles avg ~781 tokens + highlights avg ~56 tokens
+max_seq_length: 512   # reduced from 1024 → halves activation memory on P100
 
 # QLoRA quantization
 quantization:
@@ -28,8 +28,8 @@ lora:
 training:
   output_dir: "./outputs/cnndm"
   num_train_epochs: 1          # 287k samples; 1 epoch is usually enough
-  per_device_train_batch_size: 8
-  gradient_accumulation_steps: 2
+  per_device_train_batch_size: 2   # P100 16GB: 8→2 prevents OOM on 152k-vocab logits
+  gradient_accumulation_steps: 8   # keeps effective batch size = 16
   learning_rate: 2.0e-4
   weight_decay: 0.01
   warmup_ratio: 0.03      # converted to warmup_steps at runtime (ratio × total_steps)
