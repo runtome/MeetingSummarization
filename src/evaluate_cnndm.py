@@ -92,6 +92,18 @@ def load_test_csv(path: str, max_samples: int | None = None) -> pd.DataFrame:
     # Normalise column names (handle lowercase / title-case variants)
     df.columns = [c.strip().lower() for c in df.columns]
 
+    # Map common column name variants to expected names
+    col_aliases = {
+        "article": ["article", "text", "document", "input", "source", "content", "body"],
+        "highlights": ["highlights", "summary", "abstract", "target", "output", "highlight"],
+    }
+    for target, aliases in col_aliases.items():
+        if target not in df.columns:
+            for alias in aliases:
+                if alias in df.columns:
+                    df = df.rename(columns={alias: target})
+                    break
+
     required = {"article", "highlights"}
     missing = required - set(df.columns)
     if missing:

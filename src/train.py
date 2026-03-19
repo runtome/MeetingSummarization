@@ -40,9 +40,25 @@ def load_dataset_file(path: str) -> Dataset:
     if ext == ".csv":
         df = pd.read_csv(path, on_bad_lines="skip")
         df.columns = [c.strip().lower() for c in df.columns]
+
+        # Map common column name variants to expected names
+        col_aliases = {
+            "article": ["article", "text", "document", "input", "source", "content", "body"],
+            "highlights": ["highlights", "summary", "abstract", "target", "output", "highlight"],
+        }
+        for target, aliases in col_aliases.items():
+            if target not in df.columns:
+                for alias in aliases:
+                    if alias in df.columns:
+                        df = df.rename(columns={alias: target})
+                        break
+
         missing = {"article", "highlights"} - set(df.columns)
         if missing:
-            raise ValueError(f"CSV {path} missing columns: {missing}")
+            raise ValueError(
+                f"CSV {path} missing columns: {missing}. "
+                f"Available columns: {list(df.columns)}"
+            )
         df = df.dropna(subset=["article", "highlights"])
 
         records = []
