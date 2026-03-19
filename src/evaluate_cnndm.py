@@ -5,7 +5,6 @@ Usage
 -----
 python -m src.evaluate_cnndm \
     --adapter-path ./outputs/cnndm/final_adapter \
-    --test-csv     /kaggle/working/MeetingSummarization/datasets/test.csv \
     --config       configs/cnndm_training_config.yaml \
     --output       ./outputs/cnndm/eval_results.json \
     --max-samples  500        # omit to evaluate the full test set
@@ -85,39 +84,60 @@ def load_model(adapter_path: str, base_model_name: str):
 # Data loading
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_test_csv(path: str, max_samples: int | None = None) -> pd.DataFrame:
-    """Load the CNN-DailyMail test CSV and return a DataFrame."""
-    df = pd.read_csv(path, on_bad_lines="skip")
+def load_test_data(path: str, max_samples: int | None = None) -> pd.DataFrame:
+    """Load CNN-DailyMail test data from JSONL (ChatML messages) or CSV.
 
-    # Normalise column names (handle lowercase / title-case variants)
-    df.columns = [c.strip().lower() for c in df.columns]
+    For JSONL files the article is extracted from the user message and
+    highlights from the assistant message.
+    """
+    ext = Path(path).suffix.lower()
 
-    # Map common column name variants to expected names
-    col_aliases = {
-        "article": ["article", "text", "document", "input", "source", "content", "body"],
-        "highlights": ["highlights", "summary", "abstract", "target", "output", "highlight"],
-    }
-    for target, aliases in col_aliases.items():
-        if target not in df.columns:
-            for alias in aliases:
-                if alias in df.columns:
-                    df = df.rename(columns={alias: target})
-                    break
+    if ext in (".jsonl", ".json"):
+        records = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                messages = obj.get("messages", [])
+                article = ""
+                highlights = ""
+                for msg in messages:
+                    if msg["role"] == "user":
+                        # Strip the prompt prefix to get the raw article
+                        content = msg["content"]
+                        prefix = "Summarize the following news article:\n\n"
+                        article = content[len(prefix):] if content.startswith(prefix) else content
+                    elif msg["role"] == "assistant":
+                        highlights = msg["content"]
+                if article and highlights:
+                    records.append({"article": article, "highlights": highlights})
+        df = pd.DataFrame(records)
+    else:
+        # Fallback: CSV
+        df = pd.read_csv(path, on_bad_lines="skip")
+        df.columns = [c.strip().lower() for c in df.columns]
 
-    required = {"article", "highlights"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"Test CSV is missing columns: {missing}\n"
-            f"Found columns: {list(df.columns)}"
-        )
+        col_aliases = {
+            "article": ["article", "text", "document", "input", "source", "content", "body"],
+            "highlights": ["highlights", "summary", "abstract", "target", "output", "highlight"],
+        }
+        for target, aliases in col_aliases.items():
+            if target not in df.columns:
+                for alias in aliases:
+                    if alias in df.columns:
+                        df = df.rename(columns={alias: target})
+                        break
 
-    # Drop rows with missing values in either column
-    before = len(df)
-    df = df.dropna(subset=["article", "highlights"]).reset_index(drop=True)
-    dropped = before - len(df)
-    if dropped:
-        print(f"Dropped {dropped} rows with missing article/highlights.")
+        required = {"article", "highlights"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"Test file is missing columns: {missing}\n"
+                f"Found columns: {list(df.columns)}"
+            )
+        df = df.dropna(subset=["article", "highlights"]).reset_index(drop=True)
 
     if max_samples:
         df = df.head(max_samples)
@@ -224,7 +244,7 @@ def evaluate(
     top_p          = inf_cfg.get("top_p", 0.9)
 
     # 1. Load data
-    df = load_test_csv(test_csv, max_samples=max_samples)
+    df = load_test_data(test_csv, max_samples=max_samples)
 
     # 2. Load model + adapter
     model, tokenizer = load_model(adapter_path, config["model_name"])
@@ -315,10 +335,11 @@ def main():
         help="Path to the saved LoRA adapter (output of training)",
     )
     parser.add_argument(
-        "--test-csv",
+        "--test-data",
         type=str,
-        default="/kaggle/working/MeetingSummarization/datasets/test.csv",
-        help="Path to the CNN-DailyMail test CSV file",
+        default=None,
+        help="Path to the CNN-DailyMail test file (JSONL or CSV). "
+             "Defaults to data.test_file from config.",
     )
     parser.add_argument(
         "--config",
@@ -348,9 +369,11 @@ def main():
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
+    test_path = args.test_data or config.get("data", {}).get("test_file", "./datasets/test.jsonl")
+
     results = evaluate(
         adapter_path=args.adapter_path,
-        test_csv=args.test_csv,
+        test_csv=test_path,
         config=config,
         max_samples=args.max_samples,
         save_predictions=not args.no_save_predictions,

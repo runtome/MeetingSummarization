@@ -48,8 +48,10 @@ training:
 data:
   train_file: "./datasets/train.jsonl"
   val_file: "./datasets/validation.jsonl"
+  test_file: "./datasets/test.jsonl"
   max_train_samples: 50000    # set null to use full 287k
   max_val_samples: 2000       # set null to use full 13k
+  max_test_samples: 1000      # set null to use full 11k
 
 # Inference settings
 inference:

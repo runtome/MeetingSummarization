@@ -59,19 +59,23 @@ def build_dataset(config: dict):
     data_cfg = config["data"]
     max_train = data_cfg.get("max_train_samples")
     max_val = data_cfg.get("max_val_samples")
+    max_test = data_cfg.get("max_test_samples")
 
     train_examples = load_cnndm("train", max_samples=max_train)
     val_examples = load_cnndm("validation", max_samples=max_val)
+    test_examples = load_cnndm("test", max_samples=max_test)
 
     train_formatted = format_for_training(train_examples)
     val_formatted = format_for_training(val_examples)
+    test_formatted = format_for_training(test_examples)
 
     random.shuffle(train_formatted)
 
     save_jsonl(train_formatted, data_cfg["train_file"])
     save_jsonl(val_formatted, data_cfg["val_file"])
+    save_jsonl(test_formatted, data_cfg["test_file"])
 
-    print(f"\nDataset ready: {len(train_formatted)} train, {len(val_formatted)} val")
+    print(f"\nDataset ready: {len(train_formatted)} train, {len(val_formatted)} val, {len(test_formatted)} test")
 
 
 def main():
