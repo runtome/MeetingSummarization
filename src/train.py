@@ -41,22 +41,33 @@ def main():
     train_cfg = config["training"]
     data_cfg = config["data"]
 
-    # 1. Quantization config
+    # 0. GPU capability detection  ────────────────────────────────────────────
+    # Ampere (sm_80+) : bfloat16 + flash_attention_2
+    # Pascal / Volta  : float16  + sdpa  (P100 = sm_60, V100 = sm_70)
+    import torch.cuda as _cuda
+    _major = _cuda.get_device_capability()[0] if _cuda.is_available() else 0
+    _is_ampere_plus = _major >= 8
+    _dtype     = torch.bfloat16 if _is_ampere_plus else torch.float16
+    _attn_impl = "flash_attention_2" if _is_ampere_plus else "sdpa"
+    print(f"GPU sm_{_major}0 → dtype={_dtype}, attn={_attn_impl}")
+
+    # 1. Quantization config  (compute dtype follows GPU capability)
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=q_config["load_in_4bit"],
         bnb_4bit_quant_type=q_config["bnb_4bit_quant_type"],
-        bnb_4bit_compute_dtype=getattr(torch, q_config["bnb_4bit_compute_dtype"]),
+        bnb_4bit_compute_dtype=_dtype,        # bfloat16 on Ampere+, float16 on Pascal
         bnb_4bit_use_double_quant=q_config["bnb_4bit_use_double_quant"],
     )
 
     # 2. Load model
     print(f"Loading model: {model_name}")
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=bnb_config,
         device_map="auto",
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
+        dtype=_dtype,
+        attn_implementation=_attn_impl,
     )
     model.config.use_cache = False
 
@@ -111,7 +122,8 @@ def main():
         eval_steps=train_cfg["eval_steps"],
         save_total_limit=3,
         # ── precision / memory ───────────────────────────────────
-        bf16=train_cfg["bf16"],
+        bf16=_is_ampere_plus,           # bf16 only on Ampere+; P100 uses fp16
+        fp16=not _is_ampere_plus,       # fp16 on Pascal/Volta (P100/V100)
         gradient_checkpointing=train_cfg["gradient_checkpointing"],
         optim=train_cfg["optim"],
         max_grad_norm=train_cfg["max_grad_norm"],
